@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useSyncExternalStore } from 'react';
 import type { VehicleSpec } from '@/features/inspection/types/inspection.types';
 import type { DiagnosisResult } from '@/features/diagnosis/types/diagnosis.types';
 import { requestDiagnosis } from '@/features/diagnosis/services/diagnosis-api';
@@ -14,25 +14,42 @@ const DEFAULT_SPEC: VehicleSpec = {
   mileage: 65000,
 };
 
-function getInitialVehicleSpec(): VehicleSpec {
-  if (typeof window !== 'undefined') {
-    const saved = sessionStorage.getItem('current_vehicle_spec');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.maker && parsed.modelName) {
-          return parsed;
-        }
-      } catch {
-        // ignore parsing error
-      }
-    }
+function subscribe(callback: () => void) {
+  window.addEventListener('storage', callback);
+  return () => window.removeEventListener('storage', callback);
+}
+
+function getStorageSnapshot(): string | null {
+  try {
+    return sessionStorage.getItem('current_vehicle_spec');
+  } catch {
+    return null;
   }
-  return DEFAULT_SPEC;
+}
+
+function getServerSnapshot(): string | null {
+  return null;
 }
 
 export function useDiagnosis() {
-  const [vehicleSpec] = useState<VehicleSpec>(getInitialVehicleSpec);
+  const storedSpecString = useSyncExternalStore(
+    subscribe,
+    getStorageSnapshot,
+    getServerSnapshot
+  );
+
+  let vehicleSpec = DEFAULT_SPEC;
+  if (storedSpecString) {
+    try {
+      const parsed = JSON.parse(storedSpecString);
+      if (parsed.maker && parsed.modelName) {
+        vehicleSpec = parsed;
+      }
+    } catch {
+      // ignore parsing error
+    }
+  }
+
   const [symptoms, setSymptoms] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
