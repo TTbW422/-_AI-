@@ -70,4 +70,4 @@ export const POST = withAuthGuard(async (req: Request) => {
       { status: 500 }
     );
   }
-});
+}, { rateLimitType: 'ocr' });

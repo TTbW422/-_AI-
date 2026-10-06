@@ -79,4 +79,4 @@ export const POST = withAuthGuard(async (req: Request, context) => {
       { status: 500 }
     );
   }
-});
+}, { rateLimitType: 'diagnosis' });

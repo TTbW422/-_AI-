@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/shared/lib/supabase/server';
+import { checkRateLimit, type RateLimitType } from '@/shared/lib/rate-limit';
 import type { SubscriptionStatus } from '@/shared/types/database.types';
 
 export interface AuthenticatedContext {
@@ -15,6 +16,7 @@ export type GuardedHandler = (
 
 interface AuthGuardOptions {
   requiredSubscription?: SubscriptionStatus[];
+  rateLimitType?: RateLimitType;
 }
 
 export function withAuthGuard(
@@ -34,6 +36,31 @@ export function withAuthGuard(
           { error: 'Unauthorized: Authentication required.' },
           { status: 401 }
         );
+      }
+
+      // レート制限チェック（ユーザーID単位）
+      if (options?.rateLimitType) {
+        const rateLimitResult = await checkRateLimit(
+          user.id,
+          options.rateLimitType
+        );
+        if (!rateLimitResult.success) {
+          return NextResponse.json(
+            {
+              error: 'Too Many Requests: リクエスト頻度制限を超過しました。しばらく待ってから再試行してください。',
+              limit: rateLimitResult.limit,
+              remaining: rateLimitResult.remaining,
+            },
+            {
+              status: 429,
+              headers: {
+                'X-RateLimit-Limit': rateLimitResult.limit.toString(),
+                'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
+                'X-RateLimit-Reset': rateLimitResult.reset.toString(),
+              },
+            }
+          );
+        }
       }
 
       const { data: profile, error: profileError } = await supabase
